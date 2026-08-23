@@ -1,0 +1,608 @@
+*&---------------------------------------------------------------------*
+*& Report ZEVSA_FIXED_ASSET_PO_RCPT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT ZEVSA_FIXED_ASSET_PO_RCPT NO STANDARD PAGE HEADING LINE-COUNT 60.
+
+*&---------------------------------------------------------------------*
+*& Report  ZEVSA_FIXED_ASSET_PO_RCPT
+*&---------------------------------------------------------------------*
+************************************************************************
+* Program Name      : ZEVSA_FIXED_ASSET_PO_RCPT                       *
+* Transaction Code  : ZEFIXED_ASSET_PO_RECEIPT                        *
+* FDS / Spec        : CH_2983 - Asset Retirement, Financial Posting,  *
+*                     Purchase Order Creation and Goods Receipt       *
+* Author            : <Developer Name>                                *
+* Date              : 23-Aug-2026                                     *
+* Code Type         : Report                                          *
+* Application Area  : AA (Asset Accounting)                           *
+*--------------------------------------------------------------------*
+* Purpose (from serial number + storage location on the selection     *
+* screen), executed in order and stopping on any hard failure:        *
+*   1. Validate serial -> asset link (ITOB), derive asset & material  *
+*   2. Validate asset HELD status (ANLA-ORD43 = 'HELD')               *
+*   3. Post ABAVN retirement without revenue                          *
+*        (BAPI_ASSET_RETIREMENT_POST)                                 *
+*   4. Post manual FI reclassification (BAPI_ACC_DOCUMENT_POST)       *
+*   5. Create NB Purchase Order (BAPI_PO_CREATE1)                     *
+*   6. Post 101 Goods Receipt with batch (BAPI_GOODSMVT_CREATE)       *
+* Results are written to an ALV log (same approach as the existing    *
+* ZEVSAR_FIXED_ASSET_SALE report).                                    *
+*--------------------------------------------------------------------*
+* DESIGN / CONFIG NOTES (require confirmation before transport)       *
+*  - GL accounts C_GL_DEBIT / C_GL_CREDIT for the FI reclassification *
+*    are placeholders; confirm with Finance.                          *
+*  - C_LIFNR (PO vendor) is not defined in the FDS but is mandatory   *
+*    for an NB PO; populate with the correct vendor.                  *
+*  - Net book value is read from ANLC book depreciation area '01';    *
+*    confirm the area and value fields with Finance.                  *
+*  - Each step commits its own LUW. If a step fails after the         *
+*    retirement is already committed, the retirement is NOT rolled    *
+*    back automatically - it is reported in the log for manual        *
+*    correction. This matches the step-wise "stop on failure" spec.   *
+*--------------------------------------------------------------------*
+* Program History                                                    *
+*  TR#          DATE         PROGRAMMER   DESCRIPTION                  *
+*  <TR number>  23-Aug-2026  <ID>         Initial creation (CH_2983)   *
+*--------------------------------------------------------------------*
+*REPORT zevsa_fixed_asset_po_rcpt NO STANDARD PAGE HEADING LINE-COUNT 60.
+
+*----------------------------------------------------------------------*
+* Selection screen (parameters must remain at global level)
+*----------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+  PARAMETERS: p_sernr TYPE itob-sernr OBLIGATORY,   " Serial Number
+              p_lgort TYPE lgort_d    OBLIGATORY.   " Storage Location
+SELECTION-SCREEN END OF BLOCK b1.
+
+*======================================================================*
+* Local class encapsulating the whole process
+*======================================================================*
+CLASS lcl_asset_po DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    METHODS run.
+
+  PRIVATE SECTION.
+
+    TYPES: BEGIN OF ty_msg,
+             msgtyp   TYPE bapi_mtype,
+             err_text TYPE string,
+           END OF ty_msg,
+           tt_msg TYPE STANDARD TABLE OF ty_msg WITH EMPTY KEY.
+
+    TYPES: BEGIN OF ty_asset,
+             sernr TYPE itob-sernr,
+             equnr TYPE itob-equnr,
+             matnr TYPE itob-matnr,
+             meins TYPE mara-meins,
+             bukrs TYPE itob-bukrs,
+             anlnr TYPE itob-anlnr,
+             anlun TYPE itob-anlun,
+             objnr TYPE itob-objnr,
+           END OF ty_asset.
+
+    "--- Constants (per FDS CH_2983) ---------------------------------
+    CONSTANTS:
+      c_held       TYPE ord43                              VALUE 'HELD',
+      c_afabe      TYPE anlc-afabe                         VALUE '01',
+      c_trtyp_ret  TYPE bapifapo_gen_info-assettrtyp       VALUE '200',
+      c_fi_doctype TYPE bapiache09-doc_type               VALUE 'SA',
+      c_po_doctype TYPE bapimepoheader-doc_type           VALUE 'NB',
+      c_ekorg      TYPE bapimepoheader-purch_org          VALUE 'EZ01',
+      c_ekgrp      TYPE bapimepoheader-pur_group          VALUE '650',
+      c_werks      TYPE bapimepoitem-plant                VALUE '6002',
+      c_po_item    TYPE bapimepoitem-po_item              VALUE '00010',
+      c_menge      TYPE bapimepoitem-quantity             VALUE '1',
+      c_price_unit TYPE bapimepoitem-price_unit           VALUE '1',
+      c_move_type  TYPE bapi2017_gm_item_create-move_type VALUE '101',
+      c_mvt_ind    TYPE bapi2017_gm_item_create-mvt_ind   VALUE 'B',
+      c_gm_code    TYPE bapi2017_gm_code-gm_code          VALUE '01'.
+
+    " Header text is 33 chars; BKTXT is 25. Typed as string so the
+    " assignment truncates at runtime instead of failing activation.
+    CONSTANTS c_fi_hdrtxt TYPE string
+                          VALUE 'Asset Retirement Reclassification'.
+
+    " Configuration-dependent values - confirm before transport
+    CONSTANTS:
+      c_gl_debit  TYPE hkont VALUE '0000000000',   " <-- confirm (FI)
+      c_gl_credit TYPE hkont VALUE '0000000000',   " <-- confirm (FI)
+      c_lifnr     TYPE bapimepoheader-vendor VALUE '0000000000'. " <-- confirm (MM)
+
+    "--- Instance state ---------------------------------------------
+    DATA: mt_msg    TYPE tt_msg,
+          ms_asset  TYPE ty_asset,
+          mv_amount TYPE p LENGTH 13 DECIMALS 2,
+          mv_ebeln  TYPE bapimepoheader-po_number,
+          mv_error  TYPE abap_bool.
+
+    "--- Methods -----------------------------------------------------
+    METHODS: add_msg        IMPORTING iv_type TYPE bapi_mtype
+                                      iv_text TYPE string,
+             collect_return IMPORTING it_return       TYPE bapiret2_t
+                            RETURNING VALUE(rv_failed) TYPE abap_bool,
+             validate_input,
+             get_asset_value,
+             do_retirement,
+             do_financial_posting,
+             create_po,
+             post_goods_receipt,
+             display_log.
+
+ENDCLASS.
+
+CLASS lcl_asset_po IMPLEMENTATION.
+
+  METHOD run.
+
+    validate_input( ).
+    IF mv_error = abap_true.
+      display_log( ).
+      RETURN.
+    ENDIF.
+
+    get_asset_value( ).
+
+    do_retirement( ).
+    IF mv_error = abap_true.
+      display_log( ).
+      RETURN.
+    ENDIF.
+
+    do_financial_posting( ).
+    IF mv_error = abap_true.
+      display_log( ).
+      RETURN.
+    ENDIF.
+
+    create_po( ).
+    IF mv_error = abap_true.
+      display_log( ).
+      RETURN.
+    ENDIF.
+
+    post_goods_receipt( ).
+
+    display_log( ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+  METHOD add_msg.
+    APPEND VALUE #( msgtyp = iv_type err_text = iv_text ) TO mt_msg.
+    IF iv_type = 'E' OR iv_type = 'A'.
+      mv_error = abap_true.
+    ENDIF.
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+  METHOD collect_return.
+    rv_failed = abap_false.
+    LOOP AT it_return INTO DATA(ls_ret).
+      add_msg( iv_type = ls_ret-type
+               iv_text = |{ ls_ret-id } { ls_ret-number } { ls_ret-message }| ).
+      IF ls_ret-type = 'E' OR ls_ret-type = 'A'.
+        rv_failed = abap_true.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Step 1 & 2 - validate serial, derive asset, check HELD status
+*----------------------------------------------------------------------*
+  METHOD validate_input.
+
+    CLEAR: ms_asset, mv_error.
+
+    " A serial number is unique only per material, so read into a table
+    " and reject ambiguous / missing results instead of silently
+    " picking the wrong asset with SELECT SINGLE.
+    SELECT sernr, equnr, matnr, bukrs, anlnr, anlun, objnr
+      FROM itob
+      WHERE sernr = @p_sernr
+      INTO TABLE @DATA(lt_itob).
+
+    IF lines( lt_itob ) = 0.
+      add_msg( iv_type = 'E'
+               iv_text = |Serial { p_sernr } does not exist in ITOB / not linked to an asset.| ).
+      RETURN.
+    ENDIF.
+
+    IF lines( lt_itob ) > 1.
+      add_msg( iv_type = 'E'
+               iv_text = |Serial { p_sernr } is not unique in ITOB - cannot determine the asset.| ).
+      RETURN.
+    ENDIF.
+
+    DATA(ls_itob) = lt_itob[ 1 ].
+
+    ms_asset = VALUE #( sernr = ls_itob-sernr
+                        equnr = ls_itob-equnr
+                        matnr = ls_itob-matnr
+                        bukrs = ls_itob-bukrs
+                        anlnr = ls_itob-anlnr
+                        anlun = ls_itob-anlun
+                        objnr = ls_itob-objnr ).
+
+    IF ms_asset-anlnr IS INITIAL.
+      add_msg( iv_type = 'E'
+               iv_text = |Serial { p_sernr } is not linked to any asset (ITOB-ANLNR is empty).| ).
+      RETURN.
+    ENDIF.
+
+    IF ms_asset-matnr IS INITIAL.
+      add_msg( iv_type = 'E'
+               iv_text = |No material assigned to serial { p_sernr } - PO / GR cannot be created.| ).
+      RETURN.
+    ENDIF.
+
+    " Base unit of measure - needed for PO and GR items
+    SELECT SINGLE meins FROM mara
+      WHERE matnr = @ms_asset-matnr
+      INTO @ms_asset-meins.
+    IF sy-subrc <> 0.
+      add_msg( iv_type = 'E'
+               iv_text = |Material { ms_asset-matnr } does not exist in MARA.| ).
+      RETURN.
+    ENDIF.
+
+    " HELD status on the asset master
+    SELECT SINGLE ord43 FROM anla
+      WHERE bukrs = @ms_asset-bukrs
+        AND anln1 = @ms_asset-anlnr
+        AND anln2 = @ms_asset-anlun
+      INTO @DATA(lv_ord43).
+
+    IF sy-subrc <> 0.
+      add_msg( iv_type = 'E'
+               iv_text = |Asset master (ANLA) not found for asset { ms_asset-anlnr }.| ).
+      RETURN.
+    ENDIF.
+
+    IF lv_ord43 <> c_held.
+      add_msg( iv_type = 'E'
+               iv_text = |Asset { ms_asset-anlnr } is not HELD (ORD43 = { lv_ord43 }).| ).
+      RETURN.
+    ENDIF.
+
+    add_msg( iv_type = 'S'
+             iv_text = |Serial { p_sernr } validated for asset { ms_asset-anlnr } / CC { ms_asset-bukrs }.| ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Capture asset net book value (retirement value / PO price / GR value)
+*----------------------------------------------------------------------*
+  METHOD get_asset_value.
+
+    CLEAR mv_amount.
+
+    " Read the most recent fiscal year <= current year so a missing
+    " current-year ANLC row does not yield a zero valuation.
+    SELECT kansw, knafa, ksafa, kaafa, kaufw
+      FROM anlc
+      WHERE bukrs = @ms_asset-bukrs
+        AND anln1 = @ms_asset-anlnr
+        AND anln2 = @ms_asset-anlun
+        AND afabe = @c_afabe
+        AND gjahr <= @sy-datum(4)
+      ORDER BY gjahr DESCENDING
+      INTO TABLE @DATA(lt_anlc)
+      UP TO 1 ROWS.
+
+    IF lines( lt_anlc ) > 0.
+      DATA(ls_anlc) = lt_anlc[ 1 ].
+      " Depreciation values are stored as negatives, revaluation positive
+      mv_amount = ls_anlc-kansw + ls_anlc-knafa + ls_anlc-ksafa
+                + ls_anlc-kaafa + ls_anlc-kaufw.
+    ENDIF.
+
+    IF mv_amount IS INITIAL.
+      add_msg( iv_type = 'W'
+               iv_text = |Asset net book value could not be determined or is zero.| ).
+    ELSE.
+      add_msg( iv_type = 'S'
+               iv_text = |Asset valuation amount captured: { mv_amount NUMBER = USER }.| ).
+    ENDIF.
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Step 3 - ABAVN retirement without revenue
+*----------------------------------------------------------------------*
+  METHOD do_retirement.
+
+    DATA: ls_gen    TYPE bapifapo_gen_info,
+          ls_ret    TYPE bapifapo_ret,
+          ls_add    TYPE bapifapo_add_info,
+          ls_docref TYPE bapifapo_doc_ref,
+          ls_return TYPE bapiret2.
+
+    ls_gen = VALUE #( username   = sy-uname
+                      assettrtyp = c_trtyp_ret
+                      doc_date   = sy-datum
+                      pstng_date = sy-datum
+                      trans_date = sy-datum
+                      comp_code  = ms_asset-bukrs
+                      assetmaino = ms_asset-anlnr
+                      assetsubno = ms_asset-anlun ).
+
+    CALL FUNCTION 'FI_PERIOD_DETERMINE'
+      EXPORTING
+        i_bukrs = ms_asset-bukrs
+        i_budat = sy-datum
+      IMPORTING
+        e_monat = ls_gen-fis_period.
+
+    " Complete retirement, without revenue (no revenue fields populated)
+    ls_ret = VALUE #( compl_ret = abap_true
+                      valuedate = sy-datum ).
+
+    ls_add-header_txt = c_fi_hdrtxt.
+
+    CALL FUNCTION 'BAPI_ASSET_RETIREMENT_POST'
+      EXPORTING
+        generalpostingdata = ls_gen
+        retirementdata     = ls_ret
+        furtherpostingdata = ls_add
+      IMPORTING
+        documentreference  = ls_docref
+        return             = ls_return.
+
+    add_msg( iv_type = ls_return-type
+             iv_text = |{ ls_return-id } { ls_return-number } { ls_return-message }| ).
+
+    IF ls_return-type = 'E' OR ls_return-type = 'A'.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    add_msg( iv_type = 'S'
+             iv_text = |Retirement posted. Document { ls_docref-obj_key } / CC { ls_docref-obj_sys } / FY { ls_docref-obj_type }.| ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Step 4 - manual FI reclassification (FB50 equivalent)
+*----------------------------------------------------------------------*
+  METHOD do_financial_posting.
+
+    DATA: ls_header TYPE bapiache09,
+          lv_objkey TYPE bapiache09-obj_key.
+
+    IF mv_amount IS INITIAL.
+      add_msg( iv_type = 'W'
+               iv_text = |Valuation amount is zero - FI posting skipped.| ).
+      RETURN.
+    ENDIF.
+
+    SELECT SINGLE waers FROM t001
+      WHERE bukrs = @ms_asset-bukrs
+      INTO @DATA(lv_waers).
+
+    ls_header = VALUE #( username   = sy-uname
+                         header_txt = c_fi_hdrtxt
+                         comp_code  = ms_asset-bukrs
+                         doc_date   = sy-datum
+                         pstng_date = sy-datum
+                         doc_type   = c_fi_doctype ).
+
+    DATA(lt_accountgl) = VALUE bapiacgl09_tab(
+      ( itemno_acc = '0000000001' gl_account = c_gl_debit
+        item_text = c_fi_hdrtxt   comp_code  = ms_asset-bukrs )
+      ( itemno_acc = '0000000002' gl_account = c_gl_credit
+        item_text = c_fi_hdrtxt   comp_code  = ms_asset-bukrs ) ).
+
+    " Sign of AMT_DOCCUR drives debit (+) / credit (-); must net to zero
+    DATA(lt_curr) = VALUE bapiaccr09_tab(
+      ( itemno_acc = '0000000001' currency = lv_waers
+        amt_doccur = mv_amount )
+      ( itemno_acc = '0000000002' currency = lv_waers
+        amt_doccur = mv_amount * -1 ) ).
+
+    DATA lt_return TYPE bapiret2_t.
+
+    CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+      EXPORTING
+        documentheader = ls_header
+      IMPORTING
+        obj_key        = lv_objkey
+      TABLES
+        accountgl      = lt_accountgl
+        currencyamount = lt_curr
+        return         = lt_return.
+
+    IF collect_return( lt_return ) = abap_true.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    add_msg( iv_type = 'S'
+             iv_text = |FI reclassification posted. Document key: { lv_objkey }.| ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Step 5 - create NB Purchase Order
+*----------------------------------------------------------------------*
+  METHOD create_po.
+
+    CLEAR mv_ebeln.
+
+    DATA(ls_header) = VALUE bapimepoheader(
+      comp_code = ms_asset-bukrs
+      doc_type  = c_po_doctype
+      vendor    = c_lifnr           " mandatory for NB PO (see NOTE)
+      purch_org = c_ekorg
+      pur_group = c_ekgrp
+      doc_date  = sy-datum ).
+
+    DATA(ls_headerx) = VALUE bapimepoheaderx(
+      comp_code = abap_true
+      doc_type  = abap_true
+      vendor    = abap_true
+      purch_org = abap_true
+      pur_group = abap_true
+      doc_date  = abap_true ).
+
+    DATA(lt_item) = VALUE bapimepoitem_tp(
+      ( po_item    = c_po_item
+        material   = ms_asset-matnr
+        plant      = c_werks
+        stge_loc   = p_lgort
+        quantity   = c_menge
+        po_unit    = ms_asset-meins
+        net_price  = mv_amount
+        price_unit = c_price_unit ) ).
+
+    DATA(lt_itemx) = VALUE bapimepoitemx_tp(
+      ( po_item    = c_po_item
+        po_itemx   = abap_true
+        material   = abap_true
+        plant      = abap_true
+        stge_loc   = abap_true
+        quantity   = abap_true
+        po_unit    = abap_true
+        net_price  = abap_true
+        price_unit = abap_true ) ).
+
+    DATA lt_return TYPE bapiret2_t.
+
+    CALL FUNCTION 'BAPI_PO_CREATE1'
+      EXPORTING
+        poheader         = ls_header
+        poheaderx        = ls_headerx
+      IMPORTING
+        exppurchaseorder = mv_ebeln
+      TABLES
+        return           = lt_return
+        poitem           = lt_item
+        poitemx          = lt_itemx.
+
+    IF collect_return( lt_return ) = abap_true OR mv_ebeln IS INITIAL.
+      mv_error = abap_true.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    add_msg( iv_type = 'S'
+             iv_text = |Purchase Order created: { mv_ebeln }.| ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* Step 6 - post 101 Goods Receipt against the PO (with batch)
+*----------------------------------------------------------------------*
+  METHOD post_goods_receipt.
+
+    DATA: lv_batch TYPE charg_d,
+          lv_mdoc  TYPE bapi2017_gm_head_ret-mat_doc,
+          lv_myear TYPE bapi2017_gm_head_ret-doc_year.
+
+    " Only assign a batch when the material is batch managed at the plant
+    SELECT SINGLE xchpf FROM marc
+      WHERE matnr = @ms_asset-matnr
+        AND werks = @c_werks
+      INTO @DATA(lv_xchpf).
+    IF lv_xchpf = abap_true.
+      " Blank = internal batch number assignment during GR.
+      " Populate lv_batch here if external assignment is required.
+      CLEAR lv_batch.
+    ENDIF.
+
+    DATA(ls_gm_header) = VALUE bapi2017_gm_head_01(
+      pstng_date = sy-datum
+      doc_date   = sy-datum
+      header_txt = c_fi_hdrtxt ).
+
+    DATA(ls_gm_code) = VALUE bapi2017_gm_code( gm_code = c_gm_code ).
+
+    DATA(lt_gm_item) = VALUE bapi2017_gm_item_create_t(
+      ( po_number = mv_ebeln
+        po_item   = c_po_item
+        move_type = c_move_type
+        mvt_ind   = c_mvt_ind
+        material  = ms_asset-matnr
+        plant     = c_werks
+        stge_loc  = p_lgort
+        entry_qnt = c_menge
+        entry_uom = ms_asset-meins
+        batch     = lv_batch ) ).
+
+    DATA lt_return TYPE bapiret2_t.
+
+    CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+      EXPORTING
+        goodsmvt_header  = ls_gm_header
+        goodsmvt_code    = ls_gm_code
+      IMPORTING
+        materialdocument = lv_mdoc
+        matdocumentyear  = lv_myear
+      TABLES
+        goodsmvt_item    = lt_gm_item
+        return           = lt_return.
+
+    IF collect_return( lt_return ) = abap_true OR lv_mdoc IS INITIAL.
+      mv_error = abap_true.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING
+        wait = abap_true.
+
+    add_msg( iv_type = 'S'
+             iv_text = |101 Goods Receipt posted. Material document { lv_mdoc } / { lv_myear }.| ).
+
+  ENDMETHOD.
+
+*----------------------------------------------------------------------*
+* ALV log (same style as ZEVSAR_FIXED_ASSET_SALE)
+*----------------------------------------------------------------------*
+  METHOD display_log.
+
+    IF mt_msg IS INITIAL.
+      add_msg( iv_type = 'I' iv_text = |No messages generated.| ).
+    ENDIF.
+
+    DATA(lt_fcat) = VALUE slis_t_fieldcat_alv(
+      ( fieldname = 'MSGTYP'   outputlen = 15
+        seltext_l = 'Type Of Message' col_pos = 0 )
+      ( fieldname = 'ERR_TEXT' outputlen = 200
+        seltext_l = 'Description'      col_pos = 1 ) ).
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program = sy-repid
+        it_fieldcat        = lt_fcat
+      TABLES
+        t_outtab           = mt_msg
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+*======================================================================*
+* Event blocks
+*======================================================================*
+START-OF-SELECTION.
+  DATA(go_app) = NEW lcl_asset_po( ).
+  go_app->run( ).
