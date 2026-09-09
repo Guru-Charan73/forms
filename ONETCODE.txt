@@ -1,0 +1,725 @@
+*----------------------------------------------------------------------*
+***INCLUDE LZPTS_RF_ALLO01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& Module STATUS_9000 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9000 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9000'.
+  CLEAR g_btext.
+  g_btext =  TEXT-009.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9001 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9001 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9001'.
+  CONCATENATE TEXT-015 gwa_mchb-matnr TEXT-016 INTO g_btext SEPARATED BY space.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+  dyn_txt = TEXT-001.
+  IF gwa_stov-xchar EQ ''..
+    LOOP AT SCREEN.
+      IF screen-group1 = 'GRP'.
+        screen-input = 0.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module DISABLE_PGUP OUTPUT
+*&---------------------------------------------------------------------*
+*& Disable the PGUP  pushbutton
+*&---------------------------------------------------------------------*
+MODULE disable_pgup OUTPUT.
+  IF g_index EQ 1 OR g_lines EQ 1.
+    LOOP AT SCREEN.
+      IF screen-name = 'PGUP'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module DISABLE_PGDN OUTPUT
+*&---------------------------------------------------------------------*
+*& Disable the PGDN  pushbutton
+*&---------------------------------------------------------------------*
+MODULE disable_pgdn OUTPUT.
+  IF g_index EQ g_lines OR g_lines EQ 1.
+    LOOP AT SCREEN.
+      IF screen-name =  'PGDN'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9004 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9004 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9004'.
+
+  IF sy-tcode = 'ZPTS_GRIB'.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-013 .
+  ELSEIF sy-tcode = 'ZPTS_GRSTO'.
+    SET TITLEBAR 'ZPTS_GRSTO_HEAD'.
+  ENDIF.
+
+  IF sy-dynnr = '8030' OR sy-dynnr = '9030'.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-021.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9008 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9008 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9000'.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-012 .
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9005 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9005 OUTPUT.
+
+  SET PF-STATUS 'ZSTATUS_9005'.
+  CLEAR g_btext.
+  IF sy-tcode = 'ZPTS_GRIB'.
+    LOOP AT SCREEN.
+      IF screen-group1 =  'D1'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+    CONCATENATE TEXT-007 gwa_likp-vbeln TEXT-008 INTO g_btext SEPARATED BY space.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+  ELSEIF sy-tcode = 'ZPTS_GRSTO'.
+    SET TITLEBAR 'ZPTS_RF_GRSTO_ITEM'.
+    IF gwa_lips-pstyv NE 'CB99'.
+      LOOP AT SCREEN.
+        IF screen-group1 =  'D1'.
+          screen-invisible = 1.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+  ENDIF.
+
+**Begin of Change SH2K900626 SAPCTS-57 CSUBHASC 10-Jul-2025
+  SELECT SINGLE low FROM tvarvc
+    WHERE name = 'ZPTS_RF_GRSTO_PLNT_SO_ITEM'
+    AND low = @gwa_lips-werks
+    INTO @DATA(lv_plant).
+  IF lv_plant IS INITIAL.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  CLEAR: lv_plant.
+**End of Change SH2K900626 SAPCTS-57 CSUBHASC 10-Jul-2025
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9012 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9012 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9000'.
+  IF  g_tcode EQ 'ZPTS_GICC'.
+    SET TITLEBAR g_title WITH TEXT-017.
+  ELSE.
+    SET TITLEBAR g_title WITH TEXT-019.
+  ENDIF.
+  IF gwa_mkpf-bldat IS INITIAL.
+    gwa_mkpf-bldat = sy-datum.
+  ENDIF.
+  IF gwa_mkpf-budat IS INITIAL.
+    gwa_mkpf-budat = sy-datum.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9013 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9013 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_CC_N'. "SAPCTS-220 TR#DS1K936716 SKUMAR 28-Jan-2024
+  IF  g_tcode EQ 'ZPTS_GICC'."TEXT-006.
+    LOOP AT SCREEN.
+      IF screen-group1 =  'R1'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+    SET TITLEBAR g_title WITH TEXT-018 .
+  ELSE.
+    SET TITLEBAR g_title WITH TEXT-020.
+  ENDIF..
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9016 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9016 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9000'.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-012 .
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9017 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9017 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_CC'.
+  g_btext = TEXT-022.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+  IF gwa_toitem-nplei EQ space.
+
+    LOOP AT SCREEN.
+      IF screen-group1 =  'D1'.
+        screen-input = 0.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9021 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9021 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_CC'.
+  CONCATENATE TEXT-007 gwa_vhead-vbeln TEXT-008 INTO g_btext SEPARATED BY space.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module DISABLE_SAVE_PGI OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE disable_save_pgi OUTPUT.
+  IF gwa_vhead-wadat_ist IS NOT INITIAL.
+    LOOP AT SCREEN.
+      IF screen-name = 'SAVE'  OR screen-name = 'CLR'.
+        screen-invisible = 1.
+      ELSEIF screen-name EQ 'GWA_VITEM-PIKMG'.
+        screen-input = 0.
+      ENDIF.
+      MODIFY SCREEN.
+    ENDLOOP.
+  ENDIF.
+*  LOOP AT SCREEN.
+*    IF screen-name = 'POST' .
+*      screen-invisible = 1.
+*      MODIFY SCREEN.
+*      EXIT.
+*    ENDIF.
+*  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_SCREENMSG OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_screenmsg OUTPUT.
+  IF msgtype = 'E'.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-029 .
+  ELSEIF msgtype = 'S'.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-028 .
+  ELSEIF msgtype = 'I'.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-030.
+  ELSE.
+    SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-014 .
+  ENDIF.
+  CLEAR msgtype.
+  IF g_tanum IS INITIAL.
+    LOOP AT SCREEN.
+      IF screen-group1 =  'H1'.
+        screen-invisible = 1.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9010 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9010 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9005'.
+  TRANSLATE gwa_ltak-ausfb TO UPPER CASE.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH TEXT-011 .
+  IF g_edit = abap_true.
+    g_sd = TEXT-003.
+  ELSE.
+    gwa_ltap-nlpla = gwa_ltap-vlpla.
+    g_sd = TEXT-002.
+  ENDIF.
+  LOOP AT SCREEN.
+    IF screen-group1 = 'G1'.
+      IF g_edit = ''.
+        screen-input  = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ELSEIF screen-group1 = 'G2'.
+      IF g_edit = 'X'.
+        screen-invisible = 1.
+        screen-input = 0.
+        screen-active = 0.
+        MODIFY SCREEN.
+      ENDIF.
+*      GWA_LTAK-LHOLD g_edit = abap_true. "
+    ELSEIF screen-group1 = 'G3' AND g_edit = abap_true. "gwa_ltak-lhold EQ ''.
+      screen-invisible = 1.
+      screen-input = 0.
+      screen-active = 0.
+      MODIFY SCREEN.
+    ELSEIF screen-group2 = 'G2' AND gwa_ltak-lhold EQ ''.
+      CLEAR gwa_ltak-lresn.
+      screen-invisible = 1.
+      screen-input = 0.
+      screen-active = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9059 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9059 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9025'.
+  CONCATENATE 'GR Lable Overview:' gw_matdoc-mblnr INTO g_btext SEPARATED BY space.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+
+  DATA l_index(10).
+  l_index = g_index.
+  CONDENSE l_index.
+  CLEAR: gv_text, gv_text1,gv_text2.
+  CONCATENATE 'Item Quantity Label ' l_index  INTO gv_text SEPARATED BY space.
+  CONCATENATE 'the label' l_index 'Qty' INTO gv_text2 SEPARATED BY space.
+  gv_text1 = TEXT-023.
+  CONDENSE: gv_text,gv_text1,gv_text2.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9024 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9024 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9000'.
+  CONCATENATE 'GR Lable Inital:' gw_matdoc-mblnr INTO g_btext SEPARATED BY space.
+  SET TITLEBAR g_title OF PROGRAM g_prog WITH g_btext .
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module DISABLE_BATCH OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE disable_batch OUTPUT.
+  IF gwa_marc-xchar = abap_false.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1'.
+        screen-invisible = 1.
+
+        MODIFY SCREEN.
+      ELSEIF screen-group2 = 'G2'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module DISABLE_VBATCH OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE disable_ven_batch OUTPUT.
+  IF gwa_vmarc-xchar = abap_false.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1'.
+        screen-invisible = 1.
+
+        MODIFY SCREEN.
+      ELSEIF screen-group2 = 'G2'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9031 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9031 OUTPUT.
+  SET PF-STATUS 'ZPTS_9031_U2B'.
+  IF sy-tcode = 'ZPTS_WMU2B'.
+    SET TITLEBAR 'ZPTS_9031'.
+  ELSEIF sy-tcode = 'ZPTS_WMB2U'.
+    SET TITLEBAR 'ZPTS_9031_BU'.
+  ELSEIF sy-tcode = 'ZPTS_WMQ2U'.
+    SET TITLEBAR 'ZPTS_9031_QU'.
+  ELSEIF sy-tcode = 'ZPTS_WMU2Q'.
+    SET TITLEBAR 'ZPTS_9031_UQ'.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_IMSLOC'.
+    SET TITLEBAR 'ZPTS_BIN_TO_SLOC'.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_BIN'.
+    SET TITLEBAR 'ZPTS_BIN_TO_BIN'.
+  ENDIF.
+  IF sy-tcode NE 'ZPTS_WMQ2U' AND  sy-tcode NE 'ZPTS_WMU2Q' AND
+     sy-tcode NE 'ZPTS_BIN_TO_IMSLOC' ."AND SY-TCODE NE 'ZPTS_BIN_TO_BIN'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'R1'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  IF sy-tcode NE 'ZPTS_WMQ2U'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'R2'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  IF gwa_lqua-lgnum IS INITIAL.
+    SELECT SINGLE lgnum FROM lrf_wkqu INTO gwa_lqua-lgnum  WHERE bname = sy-uname AND statu = abap_true.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9032 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9032 OUTPUT.
+  SET PF-STATUS 'ZPTS_9032'.
+  IF sy-tcode = 'ZPTS_WMU2B'.
+    SET TITLEBAR 'ZPTS_9032'.
+  ELSEIF sy-tcode = 'ZPTS_WMB2U'.
+    SET TITLEBAR 'ZPTS_9032_BU'.
+  ELSEIF sy-tcode = 'ZPTS_WMQ2U'.
+    SET TITLEBAR 'ZPTS_9032_QU'.
+  ELSEIF sy-tcode = 'ZPTS_WMU2Q'.
+    SET TITLEBAR 'ZPTS_9032_UQ'.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_IMSLOC'.
+    SET TITLEBAR 'ZPTS_BIN_TO_SLOC_OV'.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_BIN'.
+    SET TITLEBAR 'ZPTS_BIN_TO_BIN_OV'.
+  ENDIF.
+  CLEAR gv_stind.
+  IF sy-tcode EQ 'ZPTS_WMU2B' OR sy-tcode EQ'ZPTS_WMQ2U' OR "NE 'ZPTS_WMBIN2IMSLOC'.
+     sy-tcode EQ 'ZPTS_WMB2U' OR sy-tcode EQ'ZPTS_WMU2Q'. "NE 'ZPTS_WMBIN2IMSLOC'.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'G1'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_IMSLOC'.
+    gv_stind = 'Unr(),Blk(3)'.
+    LOOP AT SCREEN.
+      IF screen-group2 = 'G2'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ELSEIF screen-group4 = 'G4' AND g_records LE 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+
+    ENDLOOP.
+  ELSEIF sy-tcode EQ 'ZPTS_BIN_TO_BIN'.
+    gv_stind = 'Unr(),Qul(2),Blk(3)'.
+    LOOP AT SCREEN.
+      IF screen-group3 = 'G3'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ELSEIF screen-group4 = 'G4' AND g_records LE 1 AND sy-ucomm NE 'CANC'.
+        IF screen-name NE 'GWA_LQUA-STIND'.
+          screen-input = 0.
+          MODIFY SCREEN.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9033 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9033 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_CC_SCARP'.
+  IF  g_tcode EQ 'ZPTS_WMGICC'.
+    SET TITLEBAR g_title WITH TEXT-026.
+  ELSE.
+    SET TITLEBAR g_title WITH TEXT-024.
+    LOOP AT SCREEN.
+      IF screen-group1 =  'G1'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+  IF gwa_scrpcc-bldat IS INITIAL.
+    gwa_scrpcc-bldat = sy-datum.
+  ENDIF.
+*  IF gwa_srpcc-budat IS INITIAL.
+*    gwa_srpcc-budat = sy-datum.
+*  ENDIF.
+* Begin of change  DS1K927021 Defect#216584 SKUMAR 21-Jan-2022
+  IF gwa_scrpcc-lgnum = 'ABW' AND
+     gwa_scrpcc-matnr IS NOT INITIAL.
+    SELECT SINGLE lgtyp FROM mlgt INTO gwa_scrpcc-lgtyp
+                  WHERE matnr = gwa_scrpcc-matnr
+                    AND lgnum = gwa_scrpcc-lgnum.
+    IF sy-subrc EQ 0.
+      SELECT SINGLE lgpla FROM lqua INTO gwa_scrpcc-lgpla
+                    WHERE lgnum = gwa_scrpcc-lgnum
+                      AND matnr = gwa_scrpcc-matnr
+                      AND lgtyp = gwa_scrpcc-lgtyp.
+    ENDIF.
+  ENDIF.
+* End of change  DS1K927021 Defect#216584 SKUMAR 21-Jan-2022
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9034 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9034 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_CC_SCRAP_IT'.
+  IF  g_tcode EQ 'ZPTS_WMGICC'."TEXT-006.
+    LOOP AT SCREEN.
+      IF screen-group4 =  'G4'.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+    gv_stind = 'Unr()'.
+    SET TITLEBAR g_title WITH TEXT-027 .
+  ELSE.
+    LOOP AT SCREEN.
+      IF screen-group1 =  'G1'.
+        screen-invisible = 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ELSEIF screen-group4 = 'G4' AND g_records LE 1.
+        screen-input = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+
+    gv_stind = 'Unr(),Qul(2),Blk(3)'.
+    SET TITLEBAR g_title WITH TEXT-025.
+  ENDIF..
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9036 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9035 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9004'.
+  SET TITLEBAR 'ZREEL'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9037 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9036 OUTPUT.
+  SET PF-STATUS 'ZSTATUS_9025'.
+  SET TITLEBAR 'ZREEL'.
+  LOOP AT SCREEN.
+    IF gwa_reel-ltype EQ 'N' AND screen-group1 = 'G1'.
+      screen-input = 0.
+      MODIFY SCREEN.
+      EXIT.
+    ENDIF.
+
+  ENDLOOP.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9038 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9038 OUTPUT.
+  SET PF-STATUS 'ZPTS_9032'.
+  SET TITLEBAR 'ZIMSLOC_2_WBIN_OV'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9038  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9038 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+    WHEN 'CLR'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+    WHEN 'SAVE'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_9037  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_9037 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+    WHEN 'CLR'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+    WHEN 'NEXT'.
+      g_screen_fcode = sy-ucomm.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9037 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE  status_9037 OUTPUT.
+  SET PF-STATUS 'ZPTS_9031_U2B'.
+  SET TITLEBAR 'ZPTS_IMSL_2_WBIN'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9062 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9039 OUTPUT.
+  SET TITLEBAR '  ZPTS_RF_ALL_SLOC'.
+  SET PF-STATUS 'ZPTS_RF_ALL_9039'.
+  IF gw_sloc_head-umlgo IS INITIAL.
+    gw_sloc_head-umlgo = 'FG01'.
+  ENDIF.
+  DATA:lt_parameter TYPE TABLE OF bapiparam,
+       lt_return    TYPE TABLE OF bapiret2.
+  CALL FUNCTION 'BAPI_USER_GET_DETAIL'
+    EXPORTING
+      username  = sy-uname
+*     CACHE_RESULTS        = 'X'
+*   IMPORTING
+*     LOGONDATA =
+*     DEFAULTS  =
+*     ADDRESS   =
+*     COMPANY   =
+*     SNC       =
+*     REF_USER  =
+*     ALIAS     =
+*     UCLASS    =
+*     LASTMODIFIED         =
+*     ISLOCKED  =
+*     IDENTITY  =
+*     ADMINDATA =
+*     DESCRIPTION          =
+    TABLES
+      parameter = lt_parameter
+*     PROFILES  =
+*     ACTIVITYGROUPS       =
+      return    = lt_return.
+  IF  line_exists( lt_parameter[ parid = 'WRK' ] ).
+    DATA(lw_parameter) = lt_parameter[ parid = 'WRK'].
+    gw_sloc_head-werks = lw_parameter-parva.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9040 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9040 OUTPUT.
+  SET PF-STATUS 'ZPTP_9040'.
+  SET TITLEBAR 'ZPTS_U2BST'.
+  IF gwa_b2b-lgnum IS INITIAL.
+    SELECT SINGLE lgnum FROM lrf_wkqu INTO gwa_b2b-lgnum
+       WHERE bname = sy-uname AND statu = abap_true.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9041 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9041 OUTPUT.
+  SET PF-STATUS 'ZPTS_9041'.
+  SET TITLEBAR 'ZPTS_U2BST'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9042 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9042 OUTPUT.
+  SET PF-STATUS 'ZPTP_9042'.
+  SET TITLEBAR 'ZPTS_B2UST'.
+  IF gwa_b2u-lgnum IS INITIAL.
+    SELECT SINGLE lgnum FROM lrf_wkqu INTO gwa_b2u-lgnum
+       WHERE bname = sy-uname AND statu = abap_true.
+  ENDIF.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_9043 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_9043 OUTPUT.
+  SET PF-STATUS 'ZPTS_9043'.
+  SET TITLEBAR 'ZPTS_B2UST'.
+ENDMODULE.
