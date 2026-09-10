@@ -1,0 +1,1394 @@
+*&---------------------------------------------------------------------*
+*& Include          ZNPTS_BOM_DETAILS_TOP
+*&---------------------------------------------------------------------*
+*                          Change History                             *
+***********************************************************************
+* Modlog Version      : MOD-001                                       *
+* Developer           : Murali (MPAREM)                               *
+* Functional Owner    : Divya                                         *
+* Date                : 06-Dec-23                                     *
+* TR                  : DS1K936207                                    *
+* Defect/Incident     : SAPCTS-184                                    *
+* Description         : Multi-level check box addition changes        *
+***********************************************************************
+* Modlog Version      : MOD-003                                       *
+* Developer           : Chirag (CSUBHASC)                             *
+* Functional Owner    : Divya                                         *
+* Date                : 25-Mar-25                                     *
+* TR                  : DS1K939443                                    *
+* Defect/Incident     : ITSD-15394                                    *
+* Description         : Add Storage type and Bin from PKHD            *
+***********************************************************************
+
+ TABLES : mast,stpo,stpu,marc.
+* Types Pools
+ TYPE-POOLS:
+    slis.
+ TYPES:
+   t_fieldcat TYPE slis_fieldcat_alv,
+   t_events   TYPE slis_alv_event,
+   t_layout   TYPE slis_layout_alv.
+ TYPES : BEGIN OF ty_final,
+           werks TYPE werks,
+           matnr TYPE mast-matnr,
+           stlal TYPE stko-stlal,
+           postp TYPE stpo-postp,
+           posnr TYPE stpo-posnr,
+           stufe TYPE stpox-stufe,                  " ++MOD-001
+           bmeng TYPE stko-bmeng,
+           idnrk TYPE stpo-idnrk,
+           dispo TYPE marc-dispo,
+           potx1 TYPE stpo-potx1,
+           menge TYPE stpo-menge,
+           meins TYPE stpo-meins,
+           ausch TYPE char30,
+           netau TYPE stpo-netau,
+           schgt TYPE stpo-schgt,
+           sanka TYPE stpo-sanka,
+           alpos TYPE stpo-alpos,
+           doknr TYPE stpo-doknr,
+           dokvr TYPE stpo-dokvr,
+           doktl TYPE stpo-doktl,
+           alpst TYPE stpo-alpst,
+           alprf TYPE stpo-alprf,
+           alpgr TYPE stpo-alpgr,
+           dspst TYPE stpo-dspst,
+           ebort TYPE stpu-ebort,
+           upmng TYPE char30,
+           uptxt TYPE stpu-uptxt,
+           lgort TYPE stpo-lgort,
+           prvbe TYPE stpo-prvbe,
+           beskz TYPE marc-beskz,
+           itsob TYPE stpo-itsob, "TR DS1K922769++ Defect 210394 GKOTESWARA 25th Feb 2021
+           dumps TYPE rc29p-dumps, "SAPCTS-123 TR#DS1K935437 SKUMAR 30-Aug-2023
+           lgtyp TYPE pkhd-lgtyp, "++MOD-003
+           lgpla TYPE pkhd-lgpla, "++MOD-003
+         END OF ty_final.
+ TYPES : BEGIN OF ty_mast,
+           matnr TYPE mast-matnr,
+           werks TYPE mast-werks,
+           stlnr TYPE mast-stlnr,
+           stlal TYPE mast-stlal,
+         END OF ty_mast,
+         BEGIN OF ty_stas,
+           stlnr TYPE stas-stlnr,
+           stlal TYPE stas-stlal,
+           stlkn TYPE stas-stlkn,
+           stasz TYPE stas-stasz,
+         END OF ty_stas,
+         BEGIN OF ty_stko,
+           stlnr TYPE stko-stlnr,
+           stlal TYPE stko-stlal,
+           bmeng TYPE stko-bmeng,
+         END OF ty_stko,
+         BEGIN OF ty_stpo,
+           stlnr TYPE stpo-stlnr,
+           stlkn TYPE stpo-stlkn,
+           stpoz TYPE stpo-stpoz,
+           postp TYPE stpo-postp,
+           posnr TYPE stpo-posnr,
+           idnrk TYPE stpo-idnrk,
+           potx1 TYPE stpo-potx1,
+           menge TYPE stpo-menge,
+           meins TYPE stpo-meins,
+           ausch TYPE stpo-ausch,
+           netau TYPE stpo-netau,
+           schgt TYPE stpo-schgt,
+           sanka TYPE stpo-sanka,
+           alpos TYPE stpo-alpos,
+           doknr TYPE stpo-doknr,
+           dokvr TYPE stpo-dokvr,
+           doktl TYPE stpo-doktl,
+           alpst TYPE stpo-alpst,
+           alprf TYPE stpo-alprf,
+           alpgr TYPE stpo-alpgr,
+           dspst TYPE stpo-dspst,
+           lgort TYPE stpo-lgort,
+           prvbe TYPE stpo-prvbe,
+           itsob TYPE stpo-itsob,   " TR DS1K922769++ Defect 210394 GKOTESWARA 25th Feb 2021
+         END OF ty_stpo,
+         BEGIN OF ty_stpu,
+           stlnr TYPE stpu-stlnr,
+           stlkn TYPE stpu-stlkn,
+           stpoz TYPE stpu-stpoz,
+           ebort TYPE stpu-ebort,
+           upmng TYPE stpu-upmng,
+           uptxt TYPE stpu-uptxt,
+         END OF ty_stpu,
+         BEGIN OF ty_makt,
+           matnr TYPE makt-matnr,
+           spras TYPE makt-spras,
+           maktx TYPE makt-maktx,
+         END OF ty_makt,
+         BEGIN OF ty_stb,
+           stlnr TYPE stpox-stlnr,
+           stlkn TYPE stpox-stlkn,
+           stpoz TYPE stpox-stpoz,
+           stlal TYPE stpox-stlal,
+           dumps TYPE rc29p-dumps,
+           stufe TYPE stpox-stufe,                      " ++MOD-001
+           matnr TYPE matnr,                            " ++MOD-001
+           werks TYPE werks_d,                          " ++MOD-001
+           bmeng TYPE basmn,                            " ++MOD-001
+           idnrk TYPE idnrk,    "++MOD-003
+         END OF ty_stb.
+ TYPES: BEGIN OF ty_excel,
+          idnrk TYPE stpo-idnrk,
+          potx1 TYPE stpo-potx1,
+        END OF ty_excel.
+ DATA : lt_mast TYPE STANDARD TABLE OF ty_mast,
+        ls_mast TYPE ty_mast,
+        lt_stas TYPE STANDARD TABLE OF ty_stas,
+        ls_stas TYPE ty_stas,
+        lt_stko TYPE STANDARD TABLE OF ty_stko,
+        ls_stko TYPE ty_stko,
+        lt_stpo TYPE STANDARD TABLE OF ty_stpo,
+        ls_stpo TYPE ty_stpo,
+        lt_stpu TYPE STANDARD TABLE OF ty_stpu,
+        ls_stpu TYPE ty_stpu,
+        lt_makt TYPE STANDARD TABLE OF ty_makt,
+        ls_makt TYPE ty_makt,
+        gt_stb  TYPE STANDARD TABLE OF ty_stb,
+        gs_stb  TYPE ty_stb.
+ DATA : gt_final    TYPE STANDARD TABLE OF ty_final,
+        gt_excel_1    TYPE STANDARD TABLE OF ty_excel,
+        gs_final    TYPE ty_final,
+        gt_excel    TYPE STANDARD TABLE OF string,
+        i_fieldcat3 TYPE STANDARD TABLE OF t_fieldcat,
+        l_struct    TYPE dd02l-tabname,
+        i_events    TYPE STANDARD TABLE OF t_events,
+        w_layout    TYPE t_layout,
+        p_file      TYPE ibipparms-path VALUE 'C:\',
+        ok_code     LIKE sy-ucomm.
+
+ SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+   PARAMETERS : p_werks TYPE mast-werks OBLIGATORY.
+   SELECT-OPTIONS : s_matnr FOR mast-matnr .
+   SELECT-OPTIONS : s_comp FOR stpo-idnrk.
+   SELECT-OPTIONS : s_bom FOR mast-stlal.
+   SELECT-OPTIONS : s_dispo FOR marc-dispo.
+   SELECT-OPTIONS : s_fevor FOR marc-fevor.
+ SELECTION-SCREEN END OF BLOCK b1.
+ PARAMETERS: p_mul AS CHECKBOX.                    "++MOD-001v
+
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZNPTS_BOM_DETAILS_MAIN
+*&---------------------------------------------------------------------*
+AT SELECTION-SCREEN.
+  PERFORM valid_plant.
+
+START-OF-SELECTION.
+  PERFORM validation.
+  PERFORM fetch_data.
+  IF lt_mast IS NOT INITIAL AND lt_stko IS NOT INITIAL.
+    PERFORM final_table.
+    l_struct = 'ZPTSBOM_ALV'.
+    PERFORM build_fieldcatlog TABLES i_fieldcat3 USING l_struct.
+  ENDIF.
+
+END-OF-SELECTION.
+  IF gt_final IS NOT INITIAL.
+    PERFORM alv_display TABLES gt_final  i_fieldcat3.
+  ELSE.
+    MESSAGE 'No entries found for given selection' TYPE 'S'.
+  ENDIF.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Include          ZNPTS_BOM_DETAILS_F01
+*&---------------------------------------------------------------------*
+*                          Change History                             *
+***********************************************************************
+* Modlog Version      : MOD-001                                       *
+* Developer           : Murali (MPAREM)                               *
+* Functional Owner    : Divya                                         *
+* Date                : 06-Dec-23                                     *
+* TR                  : DS1K936207                                    *
+* Defect/Incident     : SAPCTS-184                                    *
+* Description         : Multi-level check box addition changes        *
+***********************************************************************
+* Modlog Version      : MOD-002                                       *
+* Developer           : Murali (MPAREM)                               *
+* Functional Owner    : Divya                                         *
+* Date                : 16-Sep-24                                     *
+* TR                  : DS1K938462                                    *
+* Defect/Incident     : ITSD-11763                                    *
+* Description         : Material Validation Bug fix                   *
+***********************************************************************
+* Modlog Version      : MOD-003                                       *
+* Developer           : Chirag (CSUBHASC)                             *
+* Functional Owner    : Divya                                         *
+* Date                : 25-Mar-25                                     *
+* TR                  : DS1K939443                                    *
+* Defect/Incident     : ITSD-15394                                    *
+* Description         : Add Storage type and Bin from PKHD            *
+***********************************************************************
+*&---------------------------------------------------------------------*
+*& Form VALID_PLANT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM valid_plant .
+  SELECT SINGLE werks INTO @DATA(lw_werks) FROM t001w WHERE werks =  @p_werks.
+  IF sy-subrc NE 0.
+    MESSAGE e398(00) WITH TEXT-002 '' '' ''.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form FETCH_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM fetch_data .
+  SELECT werks,
+         matnr,
+         dispo,
+         fevor
+  FROM marc INTO TABLE @DATA(lt_marc)
+  WHERE werks = @p_werks
+  AND matnr IN @s_matnr
+  AND dispo IN @s_dispo
+  AND fevor IN @s_fevor.
+
+  IF lt_marc IS NOT INITIAL.
+
+    SELECT matnr werks stlnr stlal FROM mast INTO TABLE lt_mast FOR ALL ENTRIES IN lt_marc WHERE werks = lt_marc-werks AND matnr = lt_marc-matnr
+                                                                        AND stlal IN s_bom.
+  ELSE.
+    SELECT matnr werks stlnr stlal FROM mast INTO TABLE lt_mast WHERE werks = p_werks AND matnr IN s_matnr
+                                                                        AND stlal IN s_bom.
+  ENDIF.
+  IF lt_mast IS NOT INITIAL.
+    SELECT stlnr stlal bmeng FROM stko  INTO TABLE lt_stko  FOR ALL ENTRIES IN lt_mast WHERE stlnr = lt_mast-stlnr AND
+                                                                                       stlal = lt_mast-stlal AND
+                                                                                       loekz NE 'X' AND
+                                                                                       stlst = '1'.
+    SORT lt_mast BY stlnr stlal.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form VALIDATION
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM validation .
+  TYPES: BEGIN OF ty_marc,
+           matnr TYPE matnr,
+           werks TYPE werks,
+         END OF ty_marc.
+  DATA : ls_marc TYPE ty_marc,
+         lt_marc TYPE STANDARD TABLE OF ty_marc.
+  IF s_matnr IS NOT INITIAL.
+    LOOP AT s_matnr.
+      IF s_matnr-low IS NOT INITIAL AND s_matnr-low NA '*'.            " MOD-002
+        SELECT  matnr werks INTO TABLE lt_marc FROM marc WHERE matnr = s_matnr-low AND werks = p_werks.
+        IF sy-subrc NE 0.
+          MESSAGE e020(zpts_demand) WITH s_matnr-low p_werks.
+        ENDIF.
+      ENDIF.
+      IF s_matnr-high IS NOT INITIAL AND s_matnr-high NA '*'.            " MOD-002.
+        SELECT  matnr werks INTO TABLE lt_marc FROM marc WHERE matnr = s_matnr-high AND werks = p_werks.
+        IF sy-subrc NE 0.
+          MESSAGE e020(zpts_demand) WITH s_matnr-high p_werks.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form FINAL_TABLE
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM final_table .
+  DATA : lt_stb    TYPE STANDARD TABLE OF stpox,
+         ls_stb    TYPE stpox,
+         ls_topmat TYPE cstmat.                     " ++MOD-001
+  DATA: lv_stpst    TYPE stpox-stufe.               " ++MOD-001
+
+********************** BEGIN OF INSERT (MOD-001) **********************
+  IF p_mul = abap_true.
+    lv_stpst = '0'.
+  ELSE.
+    lv_stpst = '1'.
+  ENDIF.
+********************** END OF INSERT (MOD-001) ************************
+
+  LOOP AT lt_mast INTO ls_mast.
+    CALL FUNCTION 'CS_BOM_EXPL_MAT_V2'
+      EXPORTING
+        capid                 = 'PP01'
+        datuv                 = sy-datum
+        ehndl                 = '1'
+        mktls                 = 'X'
+        mehrs                 = 'X'
+        mmory                 = '1'
+        mtnrv                 = ls_mast-matnr
+        stlal                 = ls_mast-stlal
+        stpst                 = lv_stpst  "'1'            " MOD-001
+        werks                 = ls_mast-werks
+      IMPORTING
+        topmat                = ls_topmat                 " ++MOD-001
+      TABLES
+        stb                   = lt_stb
+      EXCEPTIONS
+        alt_not_found         = 1
+        call_invalid          = 2
+        material_not_found    = 3
+        missing_authorization = 4
+        no_bom_found          = 5
+        no_plant_data         = 6
+        no_suitable_bom_found = 7
+        conversion_error      = 8
+        OTHERS                = 9.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+
+    ENDIF.
+
+    IF sy-subrc = 0.
+      LOOP AT lt_stb INTO ls_stb.
+        gs_stb-stlnr = ls_stb-stlnr.
+        gs_stb-stlkn = ls_stb-stlkn.
+        gs_stb-stpoz = ls_stb-stpoz.
+        gs_stb-stlal = ls_stb-stlal.
+        gs_stb-dumps = ls_stb-dumps. "SAPCTS-123 TR#DS1K935437 SKUMAR 30-Aug-2023
+        gs_stb-stufe = ls_stb-stufe.     " ++MOD-001
+        gs_stb-matnr = ls_topmat-matnr.  " ++MOD-001
+        gs_stb-werks = ls_topmat-werks.  " ++MOD-001
+        gs_stb-bmeng = ls_topmat-bmeng.  " ++MOD-001
+        gs_stb-idnrk = ls_stb-idnrk.     " ++MOD-003
+        APPEND gs_stb TO gt_stb.
+      ENDLOOP.
+    ENDIF.
+    CLEAR: lt_stb,ls_stb,ls_topmat.        " ++MOD-001
+  ENDLOOP.
+
+  SELECT stlnr stlkn stpoz postp posnr idnrk potx1 menge meins ausch netau schgt sanka alpos doknr dokvr doktl alpst
+  alprf alpgr dspst lgort prvbe
+     itsob "TR DS1K922769 ++ Defect 210394 GKOTESWARA 25th Feb 2021
+     FROM stpo INTO TABLE lt_stpo FOR ALL ENTRIES IN gt_stb WHERE stlnr = gt_stb-stlnr
+                                                              AND stlkn = gt_stb-stlkn
+                                                              AND stpoz = gt_stb-stpoz.
+  SORT lt_stpo BY stlnr posnr.
+  IF s_comp IS NOT INITIAL.
+    DELETE lt_stpo WHERE idnrk NOT IN s_comp.
+  ENDIF.
+  SELECT werks, matnr, beskz,dispo FROM marc INTO TABLE @DATA(lt_marc_1) FOR ALL ENTRIES IN @lt_stpo WHERE werks = @p_werks AND matnr = @lt_stpo-idnrk.
+  SELECT stlnr stlkn stpoz ebort upmng uptxt FROM stpu INTO TABLE lt_stpu FOR ALL ENTRIES IN lt_stpo
+                                                                           WHERE stlnr = lt_stpo-stlnr
+                                                                           AND stlkn = lt_stpo-stlkn
+                                                                           AND stpoz = lt_stpo-stpoz.
+
+  SELECT matnr spras maktx FROM makt INTO TABLE lt_makt FOR ALL ENTRIES IN lt_stpo WHERE matnr = lt_stpo-idnrk
+                                                                                   AND spras = sy-langu.
+
+
+****Begin of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+  IF lt_stpo IS NOT INITIAL.
+
+    "get PKHD data from STPO-PRVBE
+    SELECT pkhd~prvbe, pkhd~matnr, pkhd~werks, pkhd~lgtyp, pkhd~lgpla FROM pkhd
+      FOR ALL ENTRIES IN @lt_stpo
+      WHERE prvbe = @lt_stpo-prvbe
+      INTO TABLE @DATA(lt_pkhd).
+
+    "If PRVBE is not available in STPO, get PKHD data from MARC-VSPVB
+    DATA(lt_stpo2) = lt_stpo[].
+    DELETE lt_stpo2 WHERE prvbe IS NOT INITIAL.
+    DELETE lt_stpo2 WHERE idnrk IS INITIAL.
+
+    IF lt_stpo2 IS NOT INITIAL.
+      "Get data from MARC-VSPVB
+      SELECT pkhd~prvbe, marc~matnr, pkhd~werks, pkhd~lgtyp, pkhd~lgpla FROM pkhd
+        INNER JOIN marc
+        ON marc~vspvb = pkhd~prvbe
+        FOR ALL ENTRIES IN @lt_stpo2
+        WHERE marc~werks = @p_werks
+        AND   marc~matnr = @lt_stpo2-idnrk
+        APPENDING TABLE @lt_pkhd.
+    ENDIF.
+  ENDIF.
+****End of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+
+*********************** BEGIN OF CHANGE (MOD-001) *********************
+*  LOOP AT lt_mast INTO ls_mast.
+*    READ TABLE lt_stko INTO ls_stko WITH KEY stlnr = ls_mast-stlnr
+*                                             stlal = ls_mast-stlal.
+*  LOOP AT gt_stb INTO gs_stb WHERE stlnr = ls_mast-stlnr AND stlal = ls_mast-stlal.
+*      LOOP AT lt_stpo INTO ls_stpo WHERE stlnr = gs_stb-stlnr  AND stlkn = gs_stb-stlkn AND stpoz = gs_stb-stpoz.
+  LOOP AT gt_stb INTO gs_stb.
+    READ TABLE lt_stpo INTO ls_stpo WITH KEY stlnr = gs_stb-stlnr
+                                             stlkn = gs_stb-stlkn
+                                             stpoz = gs_stb-stpoz.
+*********************** END OF CHANGE (MOD-001) ***********************
+    gs_final-dumps = gs_stb-dumps.  ""SAPCTS-123 TR#DS1K935437 SKUMAR 30-Aug-2023
+*********************** BEGIN OF CHANGE (MOD-001) *********************
+*    gs_final-werks = ls_mast-werks.
+*    gs_final-matnr = ls_mast-matnr.
+*    gs_final-stlal = ls_mast-stlal.
+*    gs_final-bmeng = ls_stko-bmeng.
+
+    gs_final-werks = gs_stb-werks.
+    gs_final-matnr = gs_stb-matnr.
+    gs_final-stlal = gs_stb-stlal.
+    gs_final-bmeng = gs_stb-bmeng.
+    gs_final-stufe = gs_stb-stufe.
+*********************** END OF CHANGE (MOD-001) ***********************
+    gs_final-posnr = ls_stpo-posnr.
+    gs_final-postp = ls_stpo-postp.
+
+**Begin of Change DS1K936887 ITSD-5693 CSUBHASC 1-Mar-2024
+    IF s_comp[] IS NOT INITIAL AND ls_stpo-idnrk NOT IN s_comp.
+      CONTINUE.
+    ENDIF.
+**End of Change DS1K936887 ITSD-5693 CSUBHASC 1-Mar-2024
+
+    gs_final-idnrk = ls_stpo-idnrk.
+    READ TABLE lt_marc_1 INTO DATA(ls_marc_1) WITH KEY matnr = ls_stpo-idnrk.
+    IF sy-subrc = 0.
+      IF ls_stpo-postp = 'L'.
+        gs_final-beskz = ls_marc_1-beskz.
+        gs_final-dispo = ls_marc_1-dispo.
+      ENDIF.
+    ENDIF.
+    gs_final-potx1 = ls_stpo-potx1.
+    IF gs_final-potx1 IS INITIAL.
+      READ TABLE lt_makt INTO ls_makt WITH KEY matnr = ls_stpo-idnrk.
+      IF sy-subrc = 0.
+        gs_final-potx1 = ls_makt-maktx.
+      ENDIF.
+    ENDIF.
+    gs_final-menge = ls_stpo-menge.
+    gs_final-meins = ls_stpo-meins.
+    gs_final-ausch = ls_stpo-ausch.
+    CONDENSE gs_final-ausch.
+    IF gs_final-ausch = '0.00'.
+      gs_final-ausch = ' '.
+      CONDENSE gs_final-ausch.
+    ELSE.
+      gs_final-ausch = gs_final-ausch.
+      CONDENSE gs_final-ausch.
+    ENDIF.
+    gs_final-netau = ls_stpo-netau.
+    gs_final-schgt = ls_stpo-schgt.
+    gs_final-sanka = ls_stpo-sanka.
+    gs_final-alpos = ls_stpo-alpos.
+    gs_final-doknr = ls_stpo-doknr.
+    gs_final-dokvr = ls_stpo-dokvr.
+    gs_final-doktl = ls_stpo-doktl.
+    gs_final-alpst = ls_stpo-alpst.
+    gs_final-alprf = ls_stpo-alprf.
+    gs_final-alpgr = ls_stpo-alpgr.
+    gs_final-dspst = ls_stpo-dspst.
+    gs_final-lgort = ls_stpo-lgort.
+    gs_final-prvbe = ls_stpo-prvbe.
+    gs_final-itsob = ls_stpo-itsob. " TR DS1K922769++ Defect 210394 GKOTESWARA 25th Feb 2021
+    READ TABLE lt_stpu INTO ls_stpu WITH KEY stlnr = ls_stpo-stlnr
+                                             stlkn = ls_stpo-stlkn
+                                             stpoz = ls_stpo-stpoz.
+    IF sy-subrc = 0  .
+      gs_final-ebort = ls_stpu-ebort.
+      gs_final-upmng = ls_stpu-upmng.
+      CONDENSE gs_final-upmng.
+      IF gs_final-upmng = '0.00'.
+        gs_final-upmng = ' '.
+        CONDENSE gs_final-upmng.
+      ELSE.
+        gs_final-upmng = gs_final-upmng.
+        CONDENSE gs_final-upmng.
+      ENDIF.
+      gs_final-uptxt = ls_stpu-uptxt.
+    ENDIF.
+
+****Begin of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+    IF gs_stb-werks = 'DKKV'.
+      READ TABLE lt_pkhd INTO DATA(ls_pkhd) WITH KEY prvbe = ls_stpo-prvbe
+                                                     werks = gs_stb-werks.
+      IF sy-subrc = 0.
+        gs_final-lgtyp = ls_pkhd-lgtyp.
+        gs_final-lgpla = ls_pkhd-lgpla.
+      ELSE.
+        READ TABLE lt_pkhd INTO ls_pkhd WITH KEY matnr = ls_stpo-idnrk
+                                                 werks = gs_stb-werks.
+        IF sy-subrc = 0.
+          gs_final-lgtyp = ls_pkhd-lgtyp.
+          gs_final-lgpla = ls_pkhd-lgpla.
+        ENDIF.
+      ENDIF.
+
+    ELSE.
+
+      READ TABLE lt_pkhd INTO ls_pkhd WITH KEY matnr = gs_stb-idnrk
+                                               werks = gs_stb-werks
+                                               prvbe = ls_stpo-prvbe.
+      IF sy-subrc = 0.
+        gs_final-lgtyp = ls_pkhd-lgtyp.
+        gs_final-lgpla = ls_pkhd-lgpla.
+      ENDIF.
+
+    ENDIF.
+****End of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+
+    APPEND gs_final TO gt_final.
+    CLEAR gs_final.
+*      ENDLOOP.                                                                 " --MOD-001
+*    ENDLOOP.                                                                   " --MOD-001
+    CLEAR: gs_stb,ls_stb,ls_mast,ls_stpu,ls_marc_1,ls_stpo,ls_stko,ls_mast,   " ++MOD-001
+           ls_pkhd. "++MOD-003
+  ENDLOOP.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form BUILD_FIELDCATLOG
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*      -->P_I_FIELDCAT3  text
+*      -->P_L_STRUCT  text
+*&---------------------------------------------------------------------*
+FORM build_fieldcatlog  TABLES   p_gt_final
+                        USING    p_i_struct.
+
+  DATA :lv_fieldcat TYPE slis_t_fieldcat_alv.
+
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_structure_name       = p_i_struct
+    CHANGING
+      ct_fieldcat            = lv_fieldcat
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+*********************** BEGIN OF INSERT (MOD-001) *********************
+  DATA: ls_fcat  TYPE slis_fieldcat_alv.
+  ls_fcat-fieldname = 'STUFE'.
+  ls_fcat-seltext_l = TEXT-005.
+  ls_fcat-seltext_m = TEXT-006.
+  ls_fcat-seltext_l = TEXT-007.
+  APPEND ls_fcat TO lv_fieldcat.
+*********************** END OF INSERT (MOD-001) ***********************
+
+****Begin of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+  CLEAR: ls_fcat.
+  ls_fcat-fieldname = 'LGTYP'.
+  ls_fcat-col_pos = 33.
+  ls_fcat-seltext_l = TEXT-008.
+  ls_fcat-seltext_m = TEXT-008.
+  ls_fcat-seltext_l = TEXT-009.
+  APPEND ls_fcat TO lv_fieldcat.
+
+  CLEAR: ls_fcat.
+  ls_fcat-fieldname = 'LGPLA'.
+  ls_fcat-col_pos = 34.
+  ls_fcat-seltext_l = TEXT-010.
+  ls_fcat-seltext_m = TEXT-010.
+  ls_fcat-seltext_l = TEXT-011.
+  APPEND ls_fcat TO lv_fieldcat.
+****End of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+
+  p_gt_final[] = lv_fieldcat[].
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form ALV_DISPLAY
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*      -->P_GT_FINAL  text
+*      -->P_I_FIELDCAT3  text
+*&---------------------------------------------------------------------*
+FORM alv_display  TABLES   p_gt_final
+                           p_i_fieldcat .
+
+
+  DATA:
+        l_program TYPE sy-repid.
+  l_program = sy-repid.
+
+  DATA : lt_fieldcat TYPE slis_t_fieldcat_alv.
+
+
+  lt_fieldcat[] = p_i_fieldcat[].
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+    EXPORTING
+      i_callback_program       = l_program
+      is_layout                = w_layout
+      i_callback_user_command  = 'USER_COMMAND'
+      i_callback_pf_status_set = 'PF_STATUS'     "TR DS1K921220++ SKUMAR 16-12-2020
+      it_fieldcat              = lt_fieldcat
+      it_events                = i_events
+    TABLES
+      t_outtab                 = p_gt_final
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form F_EXIT_PROGRAM
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM f_exit_program .
+  LEAVE PROGRAM.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form DOWNLOAD_TO_EXCEL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM download_to_excel .
+  TYPES  : BEGIN OF ty_fields,
+             fieldname(25) TYPE c,
+           END OF ty_fields.
+
+  DATA   : it_fields TYPE TABLE OF ty_fields,
+           wa_fields TYPE ty_fields.
+
+  wa_fields-fieldname = 'Plant'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Material'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Alternative BOM'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Item category'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Item Number'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Base Quantity'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Component'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'MRP Control'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Item text line 1'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Component quantity'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Component UoM'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Component Scrap'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Net Indicator'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Bulk material'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Relevancy to costing'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Alternative Item'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Document'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Document version'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Document part'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Strategy'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Priority'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'AltItem Group'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Explosion type'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Installation type'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'SubItem quantity'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'SubItem Text'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Prod.Stor.Loc'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Prod.Supp.Area'.
+  APPEND wa_fields TO it_fields .
+  wa_fields-fieldname = 'Proce.type'.
+  APPEND wa_fields TO it_fields.
+
+****Begin of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+  wa_fields-fieldname = 'Storage Type'.
+  APPEND wa_fields TO it_fields.
+  wa_fields-fieldname = 'Storage Bin'.
+  APPEND wa_fields TO it_fields.
+****End of Change DS1K935942 MOD-003 ITSD-15394 CSUBHASC 25-Mar-2025
+
+  DATA : lv_filename TYPE string.
+
+  lv_filename = p_file.
+  CONCATENATE lv_filename '.xls' INTO lv_filename .
+  CALL FUNCTION 'GUI_DOWNLOAD'
+    EXPORTING
+      filename   = lv_filename
+      filetype   = 'DAT'
+*     filetype   = 'ASC'
+    TABLES
+      data_tab   = gt_final
+      fieldnames = it_fields.
+  MESSAGE 'Report Exported Successfully' TYPE 'S'.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*& Form F4_FILENAME
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM f4_filename .
+  CALL FUNCTION 'F4_FILENAME'
+    EXPORTING
+      program_name  = syst-cprog
+      dynpro_number = syst-dynnr
+*     field_name    = ' '
+    IMPORTING
+      file_name     = p_file.
+ENDFORM.
+*Begin of changes TR DS1K921220 SKUMAR 16-12-2020
+FORM pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'ZBOM_EXCEL'.
+ENDFORM.
+*End of changes TR DS1K921220 SKUMAR 16-12-2020
+FORM user_command  USING p_ucomm LIKE sy-ucomm
+                         ps_selfield TYPE slis_selfield.
+
+  TYPES  : BEGIN OF ty_fields,
+             fieldname(25) TYPE c,
+           END OF ty_fields.
+
+  DATA   : it_fields TYPE TABLE OF ty_fields,
+           wa_fields TYPE ty_fields.
+
+
+  CASE p_ucomm.
+    WHEN 'EXPORT'.
+
+      TRY.
+*--------------------------------------------------------------------*
+* Create empty XLSX document
+*--------------------------------------------------------------------*
+
+          DATA(lo_write_access) =
+          xco_cp_xlsx=>document->empty( )->write_access( ).
+
+*--------------------------------------------------------------------*
+* Get worksheet
+*--------------------------------------------------------------------*
+
+          DATA(lo_worksheet) =
+          lo_write_access->get_workbook(
+          )->worksheet->at_position( 1 ).
+
+*--------------------------------------------------------------------*
+*===============================================================*
+* HEADER
+*===============================================================*
+*--------------------------------------------------------------------*
+* Traceability
+          DATA(lo_cursor) =
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          ).
+
+          lo_cursor->get_cell( )->value->write_from(
+          'Traceability:' ).
+* CTS part number
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 2 )
+          )->get_cell( )->value->write_from(
+          'CTS part number:' ).
+
+* Materialist
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'D' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          'Materialist:' ).
+
+* Customer PN
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'D' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 2 )
+          )->get_cell( )->value->write_from(
+          'Customer PN:' ).
+
+* Shift
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'G' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          'Shift:' ).
+
+* Date
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'I' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          'Date:' ).
+
+*--------------------------------------------------------------------*
+* Header values
+* Replace these variables with your actual variables
+*--------------------------------------------------------------------*
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'B' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'B' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 2 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'E' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'E' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 2 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'H' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'J' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value( 1 )
+          )->get_cell( )->value->write_from(
+          ' ' ).
+*--------------------------------------------------------------------*
+*===============================================================*
+* TABLE HEADER
+*===============================================================*
+*--------------------------------------------------------------------*
+          DATA lt_header TYPE STANDARD TABLE OF string WITH EMPTY KEY.
+          APPEND 'RHO part number'          TO lt_header.
+          APPEND 'Component Description'    TO lt_header.
+          APPEND 'Supplier Lot Description' TO lt_header.
+          APPEND 'Supplier Lot'             TO lt_header.
+          APPEND 'SAP Batch'                TO lt_header.
+          APPEND 'Supplier Lot'             TO lt_header.
+          APPEND 'SAP Batch'                TO lt_header.
+          APPEND 'Supplier Lot'             TO lt_header.
+          APPEND 'SAP Batch'                TO lt_header.
+
+          DATA(lv_col) = 1.
+
+          LOOP AT lt_header INTO DATA(lv_header).
+
+            DATA(lv_column) =
+            xco_cp_xlsx=>coordinate->for_numeric_value(
+            lv_col ).
+
+
+
+            lo_worksheet->cursor(
+            io_column = lv_column
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( 5 )
+            )->get_cell( )->value->write_from(
+            lv_header ).
+
+            lv_col += 1.
+
+          ENDLOOP.
+
+*--------------------------------------------------------------------*
+*===============================================================*
+* GT_FINAL DATA
+*===============================================================*
+*--------------------------------------------------------------------*
+
+          DATA(lv_row) = 6.
+
+          LOOP AT gt_final ASSIGNING FIELD-SYMBOL(<fs_final>).
+
+* A - RHO Part
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+            <fs_final>-idnrk ).
+
+* B - Component Description
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'B' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+            <fs_final>-potx1 ).
+
+* C - Supplier Lot Description
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'C' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+            ' ' ).
+
+* D - Supplier Lot
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'D' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+             ' ' ).
+
+* E - SAP Batch
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'E' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+             ' ' ).
+
+* F - Supplier Lot
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'F' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+            ' ' ).
+
+* G - SAP Batch
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'G' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+             ' ' ).
+
+* H - Supplier Lot
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'H' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+            ' ' ).
+
+* I - SAP Batch
+            lo_worksheet->cursor(
+            io_column =
+            xco_cp_xlsx=>coordinate->for_alphabetic_value( 'I' )
+            io_row =
+            xco_cp_xlsx=>coordinate->for_numeric_value( lv_row )
+            )->get_cell( )->value->write_from(
+           ' ' ).
+
+            lv_row += 1.
+
+          ENDLOOP.
+
+*--------------------------------------------------------------------*
+*===============================================================*
+* COMMENTS
+*===============================================================*
+*--------------------------------------------------------------------*
+
+          DATA(lv_comment_row) = lv_row + 1.
+
+          lo_worksheet->cursor(
+          io_column =
+          xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+          io_row =
+          xco_cp_xlsx=>coordinate->for_numeric_value(
+          lv_comment_row )
+          )->get_cell( )->value->write_from(
+          'Comments' ).
+*--------------------------------------------------------------------*
+*--------------------------------------------------------------------*
+* 7. CREATE TABLE RANGE
+*
+* Header = Row 5
+* Data   = Row 6 to lv_row - 1
+*--------------------------------------------------------------------*
+
+          DATA(lo_table_pattern) =
+            xco_cp_xlsx_selection=>pattern_builder->simple_from_to(
+            )->from_column(
+              xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+            )->to_column(
+              xco_cp_xlsx=>coordinate->for_alphabetic_value( 'I' )
+            )->from_row(
+              xco_cp_xlsx=>coordinate->for_numeric_value( 5 )
+            )->to_row(
+              xco_cp_xlsx=>coordinate->for_numeric_value( lv_row - 1 )
+            )->get_pattern( ).
+
+          DATA(lo_table_range) =
+            lo_worksheet->select( lo_table_pattern ).
+
+*--------------------------------------------------------------------*
+* 8. FORMAT TABLE HEADER
+*--------------------------------------------------------------------*
+
+          DATA(lo_header_pattern) =
+            xco_cp_xlsx_selection=>pattern_builder->simple_from_to(
+            )->from_column(
+              xco_cp_xlsx=>coordinate->for_alphabetic_value( 'A' )
+            )->to_column(
+              xco_cp_xlsx=>coordinate->for_alphabetic_value( 'I' )
+            )->from_row(
+              xco_cp_xlsx=>coordinate->for_numeric_value( 5 )
+            )->to_row(
+              xco_cp_xlsx=>coordinate->for_numeric_value( 5 )
+            )->get_pattern( ).
+
+          DATA(lo_header_range) =
+            lo_worksheet->select( lo_header_pattern ).
+*--------------------------------------------------------------------*
+***************begin of applying border
+
+          " 1. Configure border properties using the correct interface
+          " 1. Get raw file content from XCO
+*          DATA(lv_file_content) = lo_write_access->get_file_content( ).
+*
+*          " 2. Load generated zip file
+*          DATA(lo_zip) = NEW cl_abap_zip( ).
+**lo_zip->load( xstring = lv_file_content ).
+*
+*          " 3. Extract xl/styles.xml
+*          DATA lv_styles_xml TYPE xstring.
+*          lo_zip->get(
+*            EXPORTING
+*              name    = 'xl/styles.xml'
+*            IMPORTING
+*              content = lv_styles_xml
+*          ).
+*
+*          " 4. Convert XML to string and replace default border node with full borders
+*          DATA(lv_styles_str) = cl_abap_codepage=>convert_from( lv_styles_xml ).
+*
+*          REPLACE FIRST OCCURRENCE OF '<border><left/><right/><top/><bottom/><diagonal/></border>'
+*            IN lv_styles_str
+*            WITH '<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border>'.
+*
+*          " 5. Update the ZIP archive with modified styles
+*          lv_styles_xml = cl_abap_codepage=>convert_to( lv_styles_str ).
+**lo_zip->replace( name = 'xl/styles.xml' content = lv_styles_xml ).
+*
+*          " 6. Output final binary content with borders applied
+*          DATA(lv_final_xlsx) = lo_zip->save( ).
+
+
+*****end of applying borders
+*--------------------------------------------------------------------*
+* 8B. APPLY BORDERS TO RANGES (Ref: LINE0BORDERS_2.txt)
+*--------------------------------------------------------------------*
+          " 1. Configure border properties using the correct interface
+
+*--------------------------------------------------------------------*
+
+          DATA(lv_file_content) =
+           lo_write_access->get_file_content( ).
+
+***
+*--------------------------------------------------------------------*
+* WIDEN COLUMNS - patch xl/worksheets/sheet1.xml inside the xlsx zip
+*--------------------------------------------------------------------*
+          DATA(lo_zip) = NEW cl_abap_zip( ).
+          lo_zip->load( lv_file_content ).
+
+          DATA lv_sheet_x TYPE xstring.
+          lo_zip->get(
+            EXPORTING name    = 'xl/worksheets/sheet1.xml'
+            IMPORTING content = lv_sheet_x ).
+
+          " xstring -> string (sheet XML is UTF-8)
+          DATA(lv_sheet_s) = cl_abap_conv_codepage=>create_in( )->convert( lv_sheet_x ).
+
+          " <col> min/max are 1-based column numbers; width is in characters
+          DATA(lv_cols) =
+            |<cols>|                                        &&
+            |<col min="1" max="1" width="18" customWidth="1"/>| &&  " A RHO part
+            |<col min="2" max="2" width="26" customWidth="1"/>| &&  " B Component Desc
+            |<col min="3" max="3" width="26" customWidth="1"/>| &&  " C Supplier Lot Desc
+            |<col min="4" max="4" width="14" customWidth="1"/>| &&  " D Supplier Lot
+            |<col min="5" max="5" width="12" customWidth="1"/>| &&  " E SAP Batch
+            |<col min="6" max="6" width="14" customWidth="1"/>| &&  " F Supplier Lot
+            |<col min="7" max="7" width="12" customWidth="1"/>| &&  " G SAP Batch
+            |<col min="8" max="8" width="14" customWidth="1"/>| &&  " H Supplier Lot
+            |<col min="9" max="9" width="12" customWidth="1"/>| &&  " I SAP Batch
+            |</cols>|.
+
+          " <cols> must sit immediately before <sheetData> (OOXML child order is strict)
+          REPLACE FIRST OCCURRENCE OF '<sheetData'
+            IN lv_sheet_s WITH lv_cols && '<sheetData'.
+
+          " string -> xstring (UTF-8) and swap the component back in
+          DATA(lv_sheet_new) = cl_abap_conv_codepage=>create_out( )->convert( lv_sheet_s ).
+          lo_zip->delete( name = 'xl/worksheets/sheet1.xml' ).
+          lo_zip->add( name = 'xl/worksheets/sheet1.xml' content = lv_sheet_new ).
+
+          lv_file_content = lo_zip->save( ).
+
+****
+*--------------------------------------------------------------------*
+* XSTRING -> SOLIX
+*--------------------------------------------------------------------*
+
+          DATA:
+            lt_binary TYPE solix_tab,
+            lv_size   TYPE i.
+
+          CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+            EXPORTING
+              buffer        = lv_file_content
+            IMPORTING
+              output_length = lv_size
+            TABLES
+              binary_tab    = lt_binary.
+
+**--------------------------------------------------------------------*
+**===============================================================*
+** SAVE FILE DIALOG
+**===============================================================*
+**--------------------------------------------------------------------*
+*
+          DATA:
+            lv_filename TYPE string,
+            lv_path     TYPE string,
+            lv_fullpath TYPE string.
+*      gt_excel_1 = CORRESPONDING #( gt_final ).
+*      wa_fields-fieldname = 'Traceability:'.
+*      APPEND wa_fields TO it_fields .
+*      wa_fields-fieldname = 'RHO part number'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'Component Description' .
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'Supplier Lot Description'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'Supplier Lot'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'SAP Batch'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'Supplier Lot' .
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'SAP Batch'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'Supplier Lot'.
+*      APPEND wa_fields TO it_fields .
+*
+*      wa_fields-fieldname = 'SAP Batch'.
+*      APPEND wa_fields TO it_fields.
+
+          cl_gui_frontend_services=>file_save_dialog(
+          EXPORTING
+           default_extension = 'xlsx'
+           default_file_name = 'Traceability.xlsx'
+           file_filter = 'Excel Files (*.xlsx)|*.xlsx|All Files (*.*)|*.*|'
+          CHANGING
+           filename = lv_filename
+           path = lv_path
+           fullpath = lv_fullpath
+          EXCEPTIONS
+          OTHERS = 1 ).
+
+          IF sy-subrc <> 0 OR lv_fullpath IS INITIAL.
+            RETURN.
+          ENDIF.
+
+          "---------------------------------------------------------------
+          " Create XLSX file
+          "---------------------------------------------------------------
+*      DATA(lo_excel) = NEW cl_fdt_xl_spreadsheet( document_name = 'Sheet1' ).
+*
+*      DATA(lt_data) = REF #( gt_excel_1 ).
+*
+*      lo_excel->if_fdt_doc_spreadsheet~set_document(
+*        EXPORTING
+*          iv_document = lt_data ).
+*
+*      lv_xstring = lo_excel->if_fdt_doc_spreadsheet~get_document( ).
+*
+*
+*      "---------------------------------------------------------------
+*      " Convert XSTRING to binary
+*      "---------------------------------------------------------------
+*      CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+*        EXPORTING
+*          buffer     = lv_xstring
+*        TABLES
+*          binary_tab = lt_binary
+*        EXCEPTIONS
+*          failed     = 1
+*          OTHERS     = 2.
+*
+*      IF sy-subrc <> 0.
+*        MESSAGE 'Error converting Excel file to binary' TYPE 'E'.
+*        RETURN.
+*      ENDIF.
+*
+*
+*      "---------------------------------------------------------------
+*      " Get file size
+*      "---------------------------------------------------------------
+*      lv_size = xstrlen( lv_xstring ).
+*
+*
+*      "---------------------------------------------------------------
+*      " Download actual XLSX binary
+*      "---------------------------------------------------------------
+*      TRY.
+*
+*          cl_gui_frontend_services=>gui_download(
+*            EXPORTING
+*              filename     = lv_fullpath
+*              filetype     = 'BIN'
+*              bin_filesize = lv_size
+*            CHANGING
+*              data_tab     = lt_binary
+*            EXCEPTIONS
+*              file_write_error        = 1
+*              no_batch                = 2
+*              gui_refuse_filetransfer = 3
+*              invalid_type            = 4
+*              no_authority            = 5
+*              unknown_error           = 6
+*              header_not_allowed     = 7
+*              separator_not_allowed  = 8
+*              filesize_not_allowed    = 9
+*              dp_out_of_memory        = 10
+*              disk_full               = 11
+*              dp_timeout              = 12
+*              file_not_found          = 13
+*              OTHERS                  = 14 ).
+*
+*          IF sy-subrc = 0.
+*            MESSAGE |Excel file downloaded: { lv_fullpath }| TYPE 'S'.
+*          ELSE.
+*            MESSAGE 'Excel download failed' TYPE 'E'.
+*          ENDIF.
+*
+*        CATCH cx_root INTO DATA(lx_error).
+*
+*          MESSAGE lx_error->get_text( ) TYPE 'E'.
+*
+*      ENDTRY.
+
+*
+          cl_gui_frontend_services=>gui_download(
+          EXPORTING
+          filename = lv_fullpath
+          filetype = 'BIN'
+          bin_filesize = lv_size
+          CHANGING
+          data_tab = lt_binary
+          EXCEPTIONS
+          OTHERS = 1 ).
+          IF sy-subrc = 0.
+            MESSAGE | File Downloaded: { lv_fullpath }| TYPE 'S'.
+          ELSE.
+            MESSAGE 'Excel download failed' TYPE 'E'.
+          ENDIF.
+        CATCH cx_root INTO DATA(lx_error).
+          MESSAGE lx_error->get_text( ) TYPE 'E'.
+      ENDTRY.
+
+  ENDCASE.
+ENDFORM.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
