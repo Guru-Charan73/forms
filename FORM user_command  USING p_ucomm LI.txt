@@ -26,7 +26,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           )->worksheet->at_position( 1 ).
 
 *--------------------------------------------------------------------*
-* HEADER
+* HEADER LABELS
 *--------------------------------------------------------------------*
           DATA(lo_cursor) =
           lo_worksheet->cursor(
@@ -60,7 +60,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           )->get_cell( )->value->write_from( 'Date:' ).
 
 *--------------------------------------------------------------------*
-* Header values (blank placeholders)
+* HEADER VALUE PLACEHOLDERS
 *--------------------------------------------------------------------*
           lo_worksheet->cursor(
           io_column = xco_cp_xlsx=>coordinate->for_alphabetic_value( 'B' )
@@ -117,7 +117,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           ENDLOOP.
 
 *--------------------------------------------------------------------*
-* GT_FINAL DATA (from row 6)
+* DATA (from row 6)
 *--------------------------------------------------------------------*
           DATA(lv_row) = 6.
           LOOP AT gt_final ASSIGNING FIELD-SYMBOL(<fs_final>).
@@ -185,7 +185,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           DATA(lv_file_content) = lo_write_access->get_file_content( ).
 
 *--------------------------------------------------------------------*
-* PATCH sheet1.xml (column widths + cell borders) + rebuild styles.xml
+* PATCH sheet1.xml : column widths + cell borders
 *--------------------------------------------------------------------*
           DATA(lo_zip) = NEW cl_abap_zip( ).
           lo_zip->load( lv_file_content ).
@@ -194,9 +194,9 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           lo_zip->get(
             EXPORTING name    = 'xl/worksheets/sheet1.xml'
             IMPORTING content = lv_sheet_x ).
-
           DATA(lv_sheet_s) = cl_abap_conv_codepage=>create_in( )->convert( lv_sheet_x ).
 
+*-- Column widths --------------------------------------------------*
           DATA(lv_cols) =
             |<cols>|                                            &&
             |<col min="1" max="1" width="18" customWidth="1"/>| &&
@@ -213,7 +213,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           REPLACE FIRST OCCURRENCE OF '<sheetData'
             IN lv_sheet_s WITH lv_cols && '<sheetData'.
 
-*-- Borders: stamp cells A5..I(lv_row-1) with style s="1" -----------*
+*-- Borders: stamp cells A5..I(lv_row-1) safely (no duplicate s attr) --*
           DATA: lv_br  TYPE i,
                 lv_ref TYPE string.
           DATA lt_bcols TYPE TABLE OF string.
@@ -225,7 +225,11 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           WHILE lv_br <= lv_row - 1.
             LOOP AT lt_bcols INTO DATA(lv_bcol).
               lv_ref = |{ lv_bcol }{ lv_br }|.
-              REPLACE ALL OCCURRENCES OF |<c r="{ lv_ref }"|
+*             case A: cell already has s="X" -> set it to s="1"
+              REPLACE ALL OCCURRENCES OF PCRE |(<c r="{ lv_ref }") s="\d+"|
+                IN lv_sheet_s WITH |$1 s="1"|.
+*             case B: cell has no s attribute -> add s="1"
+              REPLACE ALL OCCURRENCES OF PCRE |<c r="{ lv_ref }"(?! s=)|
                 IN lv_sheet_s WITH |<c r="{ lv_ref }" s="1"|.
             ENDLOOP.
             lv_br = lv_br + 1.
@@ -235,28 +239,34 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           lo_zip->delete( name = 'xl/worksheets/sheet1.xml' ).
           lo_zip->add(    name = 'xl/worksheets/sheet1.xml' content = lv_sheet_new ).
 
-*-- Rebuild styles.xml with a thin-border style at index 1 ----------*
-          DATA(lv_styles_s) =
-            |<?xml version="1.0" encoding="UTF-8" standalone="yes"?>| &&
-            |<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">| &&
-            |<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>| &&
-            |<fills count="1"><fill><patternFill patternType="none"/></fill></fills>| &&
-            |<borders count="2">| &&
-            |<border><left/><right/><top/><bottom/><diagonal/></border>| &&
-            |<border>| &&
-            |<left style="thin"><color rgb="FF000000"/></left>| &&
-            |<right style="thin"><color rgb="FF000000"/></right>| &&
-            |<top style="thin"><color rgb="FF000000"/></top>| &&
-            |<bottom style="thin"><color rgb="FF000000"/></bottom>| &&
-            |<diagonal/></border>| &&
-            |</borders>| &&
-            |<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>| &&
-            |<cellXfs count="2">| &&
-            |<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>| &&
-            |<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>| &&
-            |</cellXfs>| &&
-            |<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>| &&
-            |</styleSheet>|.
+*--------------------------------------------------------------------*
+* PATCH styles.xml : add a thin border style (index 1) - edit existing
+*--------------------------------------------------------------------*
+          DATA lv_styles_x TYPE xstring.
+          lo_zip->get(
+            EXPORTING name    = 'xl/styles.xml'
+            IMPORTING content = lv_styles_x ).
+          DATA(lv_styles_s) = cl_abap_conv_codepage=>create_in( )->convert( lv_styles_x ).
+
+*   Excel needs 2 fills (none + gray125)
+          REPLACE FIRST OCCURRENCE OF
+            '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+            IN lv_styles_s WITH
+            '<fills count="2"><fill><patternFill patternType="none"/></fill>' &&
+            '<fill><patternFill patternType="gray125"/></fill></fills>'.
+
+*   add thin border as border index 1
+          REPLACE FIRST OCCURRENCE OF '</borders>' IN lv_styles_s WITH
+            '<border><left style="thin"/><right style="thin"/>' &&
+            '<top style="thin"/><bottom style="thin"/><diagonal/></border></borders>'.
+          REPLACE FIRST OCCURRENCE OF '<borders count="1"' IN lv_styles_s
+            WITH '<borders count="2"'.
+
+*   add cellXfs entry using borderId 1 -> becomes style index 1
+          REPLACE FIRST OCCURRENCE OF '</cellXfs>' IN lv_styles_s WITH
+            '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/></cellXfs>'.
+          REPLACE FIRST OCCURRENCE OF '<cellXfs count="1"' IN lv_styles_s
+            WITH '<cellXfs count="2"'.
 
           DATA(lv_styles_new) = cl_abap_conv_codepage=>create_out( )->convert( lv_styles_s ).
           lo_zip->delete( name = 'xl/styles.xml' ).
@@ -279,7 +289,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
               binary_tab    = lt_binary.
 
 *--------------------------------------------------------------------*
-* SAVE FILE DIALOG
+* SAVE FILE DIALOG + DOWNLOAD
 *--------------------------------------------------------------------*
           DATA: lv_filename TYPE string,
                 lv_path     TYPE string,
