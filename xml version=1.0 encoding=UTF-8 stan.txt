@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<recoveryLog xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><logFileName>error235440_01.xml</logFileName><summary>Errors were detected in file 'C:\Users\Charan Reddy\Downloads\Traceability.xlsx'</summary><removedParts><removedPart>Replaced Part: /xl/worksheets/sheet1.xml part with XML error.  No attribute name may appear more than once in the same start tag or empty element tag. Line 1, column 1242.</removedPart></removedParts></recoveryLog>
