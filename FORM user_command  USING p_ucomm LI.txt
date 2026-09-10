@@ -18,9 +18,6 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           DATA(lo_write_access) =
           xco_cp_xlsx=>document->empty( )->write_access( ).
 
-*--------------------------------------------------------------------*
-* Get worksheet
-*--------------------------------------------------------------------*
           DATA(lo_worksheet) =
           lo_write_access->get_workbook(
           )->worksheet->at_position( 1 ).
@@ -213,9 +210,12 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           REPLACE FIRST OCCURRENCE OF '<sheetData'
             IN lv_sheet_s WITH lv_cols && '<sheetData'.
 
-*-- Borders: stamp cells A5..I(lv_row-1) safely (no duplicate s attr) --*
-          DATA: lv_br  TYPE i,
-                lv_ref TYPE string.
+*-- Borders: strip any existing style, then add s="1" (no duplicates) --*
+          DATA: lv_br    TYPE i,
+                lv_ref   TYPE string,
+                lv_strip TYPE string,
+                lv_find  TYPE string,
+                lv_add   TYPE string.
           DATA lt_bcols TYPE TABLE OF string.
           APPEND 'A' TO lt_bcols. APPEND 'B' TO lt_bcols. APPEND 'C' TO lt_bcols.
           APPEND 'D' TO lt_bcols. APPEND 'E' TO lt_bcols. APPEND 'F' TO lt_bcols.
@@ -224,13 +224,14 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           lv_br = 5.
           WHILE lv_br <= lv_row - 1.
             LOOP AT lt_bcols INTO DATA(lv_bcol).
-              lv_ref = |{ lv_bcol }{ lv_br }|.
-*             case A: cell already has s="X" -> set it to s="1"
-              REPLACE ALL OCCURRENCES OF PCRE |(<c r="{ lv_ref }") s="\d+"|
-                IN lv_sheet_s WITH |$1 s="1"|.
-*             case B: cell has no s attribute -> add s="1"
-              REPLACE ALL OCCURRENCES OF PCRE |<c r="{ lv_ref }"(?! s=)|
-                IN lv_sheet_s WITH |<c r="{ lv_ref }" s="1"|.
+              lv_ref   = |{ lv_bcol }{ lv_br }|.
+              lv_strip = '(<c r="' && lv_ref && '") s="[0-9]+"'.
+              lv_find  = '<c r="'  && lv_ref && '"'.
+              lv_add   = '<c r="'  && lv_ref && '" s="1"'.
+*             1) remove any existing style attribute on this cell
+              REPLACE ALL OCCURRENCES OF PCRE lv_strip IN lv_sheet_s WITH '$1'.
+*             2) add the bordered style index
+              REPLACE ALL OCCURRENCES OF lv_find IN lv_sheet_s WITH lv_add.
             ENDLOOP.
             lv_br = lv_br + 1.
           ENDWHILE.
@@ -240,7 +241,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
           lo_zip->add(    name = 'xl/worksheets/sheet1.xml' content = lv_sheet_new ).
 
 *--------------------------------------------------------------------*
-* PATCH styles.xml : add a thin border style (index 1) - edit existing
+* PATCH styles.xml : add thin border style (index 1) - edit existing
 *--------------------------------------------------------------------*
           DATA lv_styles_x TYPE xstring.
           lo_zip->get(
@@ -248,21 +249,18 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
             IMPORTING content = lv_styles_x ).
           DATA(lv_styles_s) = cl_abap_conv_codepage=>create_in( )->convert( lv_styles_x ).
 
-*   Excel needs 2 fills (none + gray125)
           REPLACE FIRST OCCURRENCE OF
             '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
             IN lv_styles_s WITH
             '<fills count="2"><fill><patternFill patternType="none"/></fill>' &&
             '<fill><patternFill patternType="gray125"/></fill></fills>'.
 
-*   add thin border as border index 1
           REPLACE FIRST OCCURRENCE OF '</borders>' IN lv_styles_s WITH
             '<border><left style="thin"/><right style="thin"/>' &&
             '<top style="thin"/><bottom style="thin"/><diagonal/></border></borders>'.
           REPLACE FIRST OCCURRENCE OF '<borders count="1"' IN lv_styles_s
             WITH '<borders count="2"'.
 
-*   add cellXfs entry using borderId 1 -> becomes style index 1
           REPLACE FIRST OCCURRENCE OF '</cellXfs>' IN lv_styles_s WITH
             '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/></cellXfs>'.
           REPLACE FIRST OCCURRENCE OF '<cellXfs count="1"' IN lv_styles_s
@@ -289,7 +287,7 @@ FORM user_command  USING p_ucomm LIKE sy-ucomm
               binary_tab    = lt_binary.
 
 *--------------------------------------------------------------------*
-* SAVE FILE DIALOG + DOWNLOAD
+* SAVE DIALOG + DOWNLOAD
 *--------------------------------------------------------------------*
           DATA: lv_filename TYPE string,
                 lv_path     TYPE string,
